@@ -1,0 +1,21 @@
+{
+  "best_model": "rf",
+  "cluster_purity": 1.0,
+  "cluster_silhouette": 0.41602474451065063,
+  "identities": {
+    "target": "person_004",
+    "seen_others": [
+      "person_005",
+      "person_002",
+      "person_006",
+      "person_003",
+      "person_008"
+    ],
+    "unseen": [
+      "person_007",
+      "person_000",
+      "person_001"
+    ]
+  },
+  "elapsed_seconds": 364.1
+}

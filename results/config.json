@@ -1,0 +1,31 @@
+{
+  "out_dir": "/tmp/exp_full2",
+  "photos_dir": null,
+  "train_detector": "ultralight",
+  "test_detectors": [
+    "ultralight",
+    "ultralight-slim",
+    "haar"
+  ],
+  "models": [
+    "logreg",
+    "rf",
+    "tree",
+    "ann",
+    "cnn"
+  ],
+  "features": "hog",
+  "seed": 0,
+  "min_identity_width": 60,
+  "n_train_others": 5,
+  "n_test_unseen": 3,
+  "train_frames": 120,
+  "test_frames": 400,
+  "n_test_videos": 3,
+  "test_seen_others": 2,
+  "test_unseen_others": 2,
+  "threshold": 0.5,
+  "epochs": 40,
+  "width": 640,
+  "height": 480
+}

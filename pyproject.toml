@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastfacetrack"
+version = "1.0.0"
+description = "Fast face detection, extraction, target-face classification (ML and deep learning) and evaluation on video, with a built-in simulator."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Mohamad Yamen Al-Mohamad", email = "yamenmohamad@tabrizu.ac.ir" }]
+keywords = ["face detection", "face tracking", "video", "ultralight", "classification", "simulation"]
+dependencies = [
+    "numpy>=1.23",
+    "pandas>=1.5",
+    "scikit-learn>=1.2",
+    "opencv-python-headless>=4.7",
+    "joblib>=1.2",
+    "matplotlib>=3.6",
+]
+
+[project.optional-dependencies]
+deep = ["tensorflow>=2.12"]
+dev = ["pytest>=7", "tensorflow>=2.12"]
+
+[project.scripts]
+fastfacetrack = "fastfacetrack.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

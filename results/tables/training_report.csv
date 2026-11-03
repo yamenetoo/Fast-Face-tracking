@@ -1,0 +1,6 @@
+model,kind,parameters,train_seconds,n_train,n_val,val_accuracy,val_precision,val_recall,val_f1
+logreg,classical,,0.09,570,150,1.0,1.0,1.0,1.0
+rf,classical,,0.88,570,150,1.0,1.0,1.0,1.0
+tree,classical,,0.08,570,150,0.9933333333333333,0.967741935483871,1.0,0.9836065573770492
+ann,deep,213249.0,9.99,570,150,1.0,1.0,1.0,1.0
+cnn,deep,25409.0,15.46,570,150,0.9866666666666667,0.9375,1.0,0.967741935483871

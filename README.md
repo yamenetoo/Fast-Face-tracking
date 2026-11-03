@@ -47,7 +47,7 @@ The UltraLight ONNX model (about 1.2 MB) is downloaded from the [original detect
 
 ## 2. Quick start
 
-**Simulation in Colab** (no data needed): open the badge above and run all cells (about 10 minutes on CPU).
+**Simulation in Colab** (no data needed): open the badge above and choose Runtime → Run all (about 10 minutes on CPU).
 
 **Simulation from the terminal**
 
@@ -198,7 +198,7 @@ Fast-Face-tracking/
 ├── src/fastfacetrack/        the package (detectors, video, extraction, features, clustering,
 │                             models, training, evaluation, simulation, report, pipeline, cli)
 ├── tests/                    pytest suite (18 tests)
-├── notebooks/colab_simulation.ipynb   the Colab simulation, executed
+├── notebooks/colab_simulation.ipynb   the Colab notebook: install, run, show results (not pre-executed)
 ├── examples/run_simulation.py
 ├── results/                  tables, figures and settings of the simulation reported above
 ├── pyproject.toml  LICENSE  README.md

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" width="140" alt="fastfacetrack logo">
+</p>
+
 # fastfacetrack
 
 Fast face detection, extraction, target-face classification and evaluation on video, with a built-in simulator and a one-click Colab notebook.

@@ -129,3 +129,52 @@ def run_benchmark(out_dir="results/benchmark", seeds=range(2000, 2010), log=prin
     (out / "seeds.json").write_text(json.dumps(list(seeds)))
     log(agg.to_string()); log(cagg.to_string())
     return agg, cagg
+
+
+def _null_maxima(sw, frames, record=True):
+    """Maxima of the scan statistic over object-free frames, updating the background as in deployment."""
+    from .swift import scan
+    out = []
+    for f in frames:
+        (z, _), _ = scan(sw.bg.distance(f), sw.sizes, sw.stride)
+        out.append(z)
+        sw.bg.update(f)
+    return out if record else None
+
+
+def run_calibration_study(out_dir="results/calibration", seeds=range(3000, 3030), alpha=0.05, m=100, n_test=200, log=print):
+    """Does the order-statistic threshold hold on later frames of the same object-free stream?
+
+    mode A: calibrate on the m frames that follow a 30-frame initialisation (as in the benchmark);
+    modes B and C: discard a further 100 or 300 frames of burn-in first, so the background settles.
+    The achieved false-alarm probability is the share of the test-frame maxima above the threshold.
+    """
+    from .swift import conformal_threshold
+    out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
+    rows, maxima = [], {}
+    for seed in seeds:
+        cfg = MovingConfig(seed=seed, n_frames=30 + 300 + m + n_test)
+        stream, _ = simulate_scene(cfg, 0)
+        shape = (cfg.height, cfg.width)
+        for mode, burn in (("A", 0), ("B", 100), ("C", 300)):
+            sw = SwiftMO(shape, alpha=alpha)
+            sw.bg.init(stream[:30])
+            if burn:
+                _null_maxima(sw, stream[30:30 + burn], record=False)
+            a = 30 + burn
+            cal = _null_maxima(sw, stream[a:a + m])
+            c = conformal_threshold(cal, alpha)
+            test = _null_maxima(sw, stream[a + m:a + m + n_test])
+            rows.append({"seed": seed, "mode": mode, "threshold": c, "cal_median": float(np.median(cal)),
+                         "test_median": float(np.median(test)), "test_max": float(np.max(test)),
+                         "exceed": float(np.mean(np.array(test) > c))})
+            if seed == seeds[0]:
+                maxima[mode] = {"cal": cal, "test": test, "c": c}
+        log(f"seed {seed}")
+    df = pd.DataFrame(rows)
+    df.to_csv(out / "calibration_study.csv", index=False)
+    (out / "example_maxima.json").write_text(json.dumps(maxima))
+    s = df.groupby("mode").agg(threshold=("threshold", "mean"), test_median=("test_median", "mean"), test_max=("test_max", "mean"),
+                               exceed_mean=("exceed", "mean"), exceed_sd=("exceed", "std"), exceed_max=("exceed", "max")).round(4)
+    s.to_csv(out / "calibration_summary.csv"); log(s.to_string())
+    return df, s

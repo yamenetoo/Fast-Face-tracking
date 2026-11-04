@@ -1,0 +1,305 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{booktabs,array,multirow}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+
+\DeclareMathOperator{\tr}{tr}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Pp}{\mathbb{P}}
+\newcommand{\swift}{\textsc{Swift-MO}}
+\newcommand{\todo}[1]{{\color{red}[#1]}}
+
+\input{numbers}
+
+\title{Fast Statistical Detection, Segmentation and Classification of Moving Objects\\ by Sufficient-Statistic Window Scanning}
+\author{Mohamad Yamen Al-Mohamad\\[2pt]
+\small Department of Statistics, University of Tabriz, Tabriz, Iran\\
+\small \texttt{yamenmohamad@tabrizu.ac.ir}}
+\date{\today\\[2pt]\small Preprint, first full draft}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Moving objects in video are usually found with cheap background subtraction, which returns pixels but no classes and no error guarantee, or with trained deep detectors, which need labelled data and a good deal of computation per frame.
+We study a purely statistical alternative, \swift{}.
+A per-pixel adaptive Gaussian background gives a motion statistic; integral images of its sufficient statistics make the score of \emph{every} sub-window of every size computable in constant time, so all windows on a grid are scanned in each frame.
+The alarm threshold is an order statistic of the maximum of the scan statistic over object-free frames, which bounds the false-alarm probability per frame, jointly for all windows, in finite samples and without distributional assumptions, provided object-free frames are exchangeable.
+Detected windows are tracked and classified against Gaussian colour models by Wald's sequential probability ratio test.
+We prove that the window likelihood computed from integral images is exact and that the threshold has the stated guarantee, and we evaluate the method on synthetic scenes with exact ground truth, on ten scenes that were not used during development.
+\swift{} scores \NwinPerFrame{} windows per $320\times240$ frame in \msSwift{} ms on two CPU cores and raises no false alarm in 1000 object-free frames against a target of $0.05$; its detection F$_1$ is \fSwift{}, slightly below the \fMog{} of OpenCV's MOG2 and KNN subtractors, which run about three times faster and give no class labels.
+The calibrated threshold and the illumination compensation are necessary on these data (a fixed threshold alarms in every frame); the sequential classifier did not improve accuracy.
+No real video and no trained detector have been used yet, so the paper reports a method with proofs and a first, limited, synthetic evaluation.
+\end{abstract}
+
+\noindent\textbf{Keywords:} moving-object detection; scan statistics; integral images; sequential probability ratio test; distribution-free inference; real-time video analysis.
+
+\section{Introduction}\label{sec:intro}
+Video analysis on cameras, drones and other small devices needs three answers per frame: where the moving objects are, which pixels belong to them, and what they are.
+Two routes are common, and each gives something up.
+Background subtraction is cheap, but it returns moving pixels only, it carries no class labels, and its threshold is tuned by hand, so nothing is known about how often it raises a false alarm.
+Deep detectors return boxes and classes, but they must be trained on labelled data for each application, and on a CPU their cost is large against the time budget of one frame.
+
+We ask whether the three tasks can be served by one statistical engine that needs no network training, runs on a CPU, and comes with a stated error rate.
+The starting point is simple.
+If pixels are modelled by Gaussian distributions, the log-likelihood of a window depends on the pixels only through their number, their sum and their sum of products.
+Those are sums over a rectangle, and rectangle sums are available in constant time from integral images \cite{crow1984,viola2004}.
+Hence every sub-window of every size and aspect ratio can be scored, and the search is limited by the number of windows, not by the cost of scoring one.
+
+Once all windows are scored, detection is a multiple-testing problem over many thousands of strongly dependent windows.
+We treat it as such: the threshold is calibrated on the maximum of the scan statistic over object-free frames, so the false-alarm probability per frame is bounded for all windows at once.
+Classification is sequential: the evidence for each class is accumulated along the frames of a track and a decision is taken when it crosses Wald's boundary \cite{wald1945}.
+
+\paragraph{Contributions.}
+\begin{enumerate}[label=(\arabic*),leftmargin=*]
+\item An exact constant-time computation of the Gaussian log-likelihood of any window from integral images of sufficient statistics (Proposition~\ref{prop:window}).
+\item A scan statistic for moving objects built on an adaptive background, with a finite-sample, distribution-free bound on the false-alarm probability per frame over all windows jointly (Proposition~\ref{prop:conformal}).
+\item A tracking and sequential-classification stage whose decision delay is measured and whose error levels are set by the user.
+\item An open-source implementation with a simulator that gives exact ground truth, and a held-out evaluation that includes ablations, background-subtraction baselines and negative results.
+\end{enumerate}
+What the paper does \emph{not} show: any result on real video, any comparison with a trained deep detector, and any speed-up from temporal gating (a design that is described but not implemented).
+Section~\ref{sec:discussion} states what would have to be done to support such claims.
+
+\section{Related work}\label{sec:related}
+\paragraph{Integral images and sliding windows.}
+Summed-area tables \cite{crow1984} and their use for constant-time rectangle features in real-time detection \cite{viola2004} underlie our scoring step.
+We use them differently: not to compute hand-designed features that a classifier weighs, but to obtain sufficient statistics from which a likelihood is computed exactly.
+
+\paragraph{Efficient search over windows.}
+Efficient subwindow search \cite{lampert2008} finds the best window by branch and bound without scoring all of them.
+We score all windows on a stride grid, because several objects may be present and every locally maximal window is needed.
+
+\paragraph{Scan statistics.}
+The scan statistic, the maximum of a local statistic over windows, and its null distribution are classical \cite{naus1965,kulldorff1997,glaz2001}, mostly for point processes in space and time.
+We apply the same logic to the pixel-wise motion statistic of a video frame and calibrate the maximum empirically.
+
+\paragraph{Background subtraction.}
+Adaptive Gaussian models per pixel and their mixtures \cite{stauffer1999} decide pixel by pixel.
+We pass the same per-pixel evidence to window statistics, so a decision is made on a region.
+
+\paragraph{Distribution-free error control.}
+Rank-based thresholds with finite-sample validity under exchangeability are the core of conformal inference \cite{vovk2005,lei2018}.
+We use the simplest such threshold, an order statistic of null maxima.
+
+\paragraph{Sequential testing.}
+Wald's sequential probability ratio test \cite{wald1945} minimises the expected number of independent observations among tests with the same error levels; we apply it to the frames of a track, where independence holds only approximately.
+
+\paragraph{Benchmarks.}
+Change detection is commonly evaluated on CDnet~2014 \cite{goyette2012}.
+We have not yet run it.
+A systematic literature search for a prior work that combines the four elements (exact window likelihoods from integral images, a conformal scan threshold on video frames, tracking, and sequential classification) is still to be done and could reduce the novelty claim.
+
+\section{Method}\label{sec:method}
+A frame is an $H\times W$ array of pixel vectors $x_p\in\R^d$ ($d=3$ for colour).
+A \emph{window} $\mathcal W$ is an axis-aligned rectangle with $n$ pixels.
+
+\subsection{Constant-time window likelihood}\label{sec:window}
+Model the pixels of an object class $k$ as independent $N(\mu_k,\Sigma_k)$.
+For a window put $S_1=\sum_{p\in\mathcal W}x_p$ and $S_2=\sum_{p\in\mathcal W}x_px_p^{\top}$.
+
+\begin{proposition}\label{prop:window}
+The log-likelihood of the pixels of $\mathcal W$ under class $k$ depends on the data only through $(n,S_1,S_2)$:
+\begin{equation}\label{eq:loglik}
+\ell_k(\mathcal W)=-\tfrac12\Big[n\big(d\log 2\pi+\log|\Sigma_k|\big)+\tr\!\big(\Sigma_k^{-1}(S_2-S_1\mu_k^{\top}-\mu_kS_1^{\top}+n\mu_k\mu_k^{\top})\big)\Big].
+\end{equation}
+If the integral images of the $d$ channels $x_i$ and of the $d(d+1)/2$ products $x_ix_j$ are built once per frame, then $(n,S_1,S_2)$ of any window cost four table reads per channel, so $\ell_k(\mathcal W)$ costs $O(d^2)$ operations regardless of $n$.
+\end{proposition}
+\begin{proof}
+Sum the log-density over $\mathcal W$ and expand $(x-\mu)^{\top}\Sigma^{-1}(x-\mu)=x^{\top}\Sigma^{-1}x-2\mu^{\top}\Sigma^{-1}x+\mu^{\top}\Sigma^{-1}\mu$.
+The sum of the quadratic form equals $\tr\big(\Sigma^{-1}\sum_p(x_p-\mu)(x_p-\mu)^{\top}\big)$, and $\sum_p(x_p-\mu)(x_p-\mu)^{\top}=S_2-S_1\mu^{\top}-\mu S_1^{\top}+n\mu\mu^{\top}$.
+A rectangle sum from an integral image $I$ is $I(y_1,x_1)-I(y_0,x_1)-I(y_1,x_0)+I(y_0,x_0)$.
+\end{proof}
+
+\subsection{Motion scan statistic}\label{sec:scan}
+Each pixel has an adaptive background $N(m_p,V_p)$ with diagonal $V_p$, updated by exponential forgetting with rate $0.02$; pixels inside detected objects are updated at 5\% of that rate.
+A global illumination change must not be mistaken for motion, so the per-channel median of the frame difference is subtracted before scoring and before the variance update.
+Let $D_p=(x_p-m_p)^{\top}V_p^{-1}(x_p-m_p)$, capped at a constant to limit the influence of outliers.
+On background $D_p$ is approximately $\chi^2_d$, and we define
+\begin{equation}\label{eq:Z}
+Z(\mathcal W)=\frac{\sum_{p\in\mathcal W}D_p-nd}{\sqrt{2nd}},
+\end{equation}
+which has mean $0$ and variance $1$ for independent $\chi^2_d$ terms and no cap.
+One integral image of $D$ gives $Z(\mathcal W)$ in $O(1)$ for every window.
+Windows are taken on a grid of stride $s$, over a geometric set of sizes and three aspect ratios.
+For a compact object $Z$ is largest at windows that match it, because added background pixels contribute zero mean and enlarge the denominator.
+
+\subsection{A calibrated threshold over all windows}\label{sec:calibration}
+The threshold has to hold for the maximum over the whole window set, not for one window.
+Let $M=\max_{\mathcal W}Z(\mathcal W)$ on a frame without moving objects.
+
+\begin{proposition}\label{prop:conformal}
+Let $M_1,\dots,M_m$ be the maxima of $m$ object-free frames and $M_{m+1}$ that of a new object-free frame.
+If $(M_1,\dots,M_{m+1})$ are exchangeable, and $c$ is the $k$-th smallest of $M_1,\dots,M_m$ with $k=\lceil(m+1)(1-\alpha)\rceil\le m$, then
+\begin{equation}
+\Pp\big(M_{m+1}>c\big)\le\alpha .
+\end{equation}
+\end{proposition}
+\begin{proof}
+By exchangeability, and after breaking ties at random, the rank of $M_{m+1}$ among the $m+1$ values is uniform on $\{1,\dots,m+1\}$.
+$M_{m+1}>c$ implies that its rank exceeds $k$, which has probability $(m+1-k)/(m+1)\le\alpha$.
+\end{proof}
+The bound needs $m\ge\lceil 1/\alpha\rceil-1$ calibration frames and holds whatever the number of windows, their overlap and the distribution of the pixels.
+Its assumption is that object-free frames are exchangeable.
+With an adaptive background this holds only approximately, and in particular the first frames after initialisation are \emph{not} exchangeable with later ones (Section~\ref{sec:false-alarms}).
+
+\subsection{Segmentation, tracking and sequential classification}\label{sec:track}
+All locally maximal windows above the threshold (maximum of $Z$ over a window-sized neighbourhood at each size) are collected.
+A greedy suppression keeps the best window and removes every window that overlaps a kept one by at least half of the smaller area, which removes both sub-windows of an object and windows that cover several objects.
+Inside a kept window, pixels with $D_p$ above a $\chi^2$ quantile form the object mask.
+
+Detections are matched to existing tracks by intersection over union.
+For a track and a frame, the class log-likelihoods of the mask pixels, computed by~\eqref{eq:loglik}, are scaled to $n_{\mathrm{eff}}=20$ effective independent pixels (neighbouring pixels are dependent) and added to the track's accumulated evidence $A(k)$.
+With $\lambda(k)=A(k)-\log\sum_{j\ne k}e^{A(j)}$ the log-odds of class $k$ against the rest, class $k$ is declared when $\lambda(k)\ge\log\frac{1-\beta}{\alpha'}$, Wald's upper boundary with error levels $\alpha'=\beta=0.01$.
+
+\subsection{Complexity}\label{sec:complexity}
+Per frame the integral images cost $O\big(HW(1+d+d(d+1)/2)\big)$, and each window then costs $O(1)$.
+With stride $s$, $S$ sizes and $A$ aspect ratios there are about $(HW/s^2)SA$ windows.
+For $320\times240$, $s=4$ and 27 size--shape pairs we score \NwinPerFrame{} windows.
+Scanning all windows with $s=1$ and all sizes would need about $(HW)^2/4$ windows, which is not feasible in real time.
+
+\section{Experiments}\label{sec:experiments}
+All experiments are on synthetic scenes with exact ground truth.
+They check the method against its own assumptions; they are not evidence of performance on real video.
+
+\subsection{Setup}\label{sec:setup}
+The simulator renders $320\times240$ colour frames: a smooth random background, additive Gaussian pixel noise (sd 5), a slow sinusoidal illumination drift (amplitude 6 grey levels), and three elliptical objects (28 to 64 pixels across) that bounce at constant speed.
+Objects belong to three classes (red, green, yellow) whose pixels are independent Gaussian with overlapping colour distributions (per-channel sd 22).
+A parameter, the class separation, pulls the three class means towards their common mean: 1 is the default, $0.25$ and $0.1$ make the classes much harder to tell apart.
+Detections match a true box at intersection over union $\ge 0.5$.
+Settings were not varied: $\alpha=0.05$, stride $4$, 27 window shapes, $n_{\mathrm{eff}}=20$, Wald levels $0.01$.
+Timings are per frame, on two CPU cores of a cloud container, include all stages, and are single-run means over the scene.
+
+\paragraph{Protocol.}
+For each scene the threshold is calibrated on 100 object-free frames that follow a 30-frame warm-up; false alarms are counted on the next 100 object-free frames of the same stream; then the 240-frame scene with objects is processed with the same detector.
+The results below are on \nSeeds{} scenes (seeds \seedLow--\seedHigh) that were generated after the last change to the algorithm.
+The development history, including an earlier run on other scenes that exposed a defect, is in Appendix~\ref{app:history}.
+
+\subsection{Exactness of the window likelihood}\label{sec:exactness}
+On random data ($d=3$, window $37\times31$), the log-likelihood from integral images and the direct sum differ by $9\times10^{-13}$ on a value of about $-6156$, which is floating-point precision; this is also an automated test.
+Building the nine integral images (three channels, six products) of a $640\times480$ frame takes about 8 ms in our environment.
+
+\subsection{False alarms}\label{sec:false-alarms}
+Table~\ref{tab:detection} (column ``False-alarm rate'') gives the share of the 100 object-free test frames that contain at least one detection, averaged over the \nSeeds{} scenes.
+With the calibrated threshold no frame raised an alarm in $1000$ frames, against a target of $\alpha=0.05$, so the bound of Proposition~\ref{prop:conformal} is respected and the threshold is probably conservative: the calibration frames lie early in the stream, when the background has just been initialised from 30 frames and is still variable, so their maxima exceed those of later frames, which violates exchangeability in the safe direction.
+We did not measure by how much.
+A conventional fixed threshold of $Z>3$ is useless here: it raises an alarm in every frame (rate $1.000$) and its precision falls to $0.06$.
+Without the illumination compensation of Section~\ref{sec:scan} the rate is \faNoComp{}: the slow drift of the scene is read as motion by large windows.
+
+\subsection{Detection compared with background subtraction}\label{sec:detection}
+\begin{table}[t]
+\centering\small
+\resizebox{\textwidth}{!}{\input{tab_detection}}
+\caption{Detection on \nSeeds{} held-out synthetic scenes (mean $\pm$ sd over scenes). SWIFT-MO rows are the full method and three ablations; MOG2 and KNN are OpenCV background subtractors followed by a morphological opening and connected components (minimum area 150 pixels). The baselines give no class labels.}
+\label{tab:detection}
+\end{table}
+Table~\ref{tab:detection} compares the methods.
+The full method reaches F$_1$ \fSwift{} ($\pm\fSwiftSd$ over scenes); MOG2 and KNN reach \fMog{} and run 2 to 3 times faster (\msKnn{} and \msMog{} ms against \msSwift{} ms per frame).
+So on these scenes, for detection alone, the scan statistic is not better than pixel-wise background subtraction and costs more.
+Removing overlap suppression is catastrophic (precision $0.03$, about 100 ms per frame), because each object is then reported by dozens of overlapping windows.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{fig_examples.png}
+\caption{Frames 10, 60, 120 and 180 of the development scene. Green: ground truth; red: detections, labelled with the class once the sequential test has decided. Objects appear as textured ellipses because pixels are independent Gaussian.}
+\label{fig:examples}
+\end{figure}
+
+\subsection{Sequential classification}\label{sec:sprt}
+\begin{table}[t]
+\centering\small
+\resizebox{\textwidth}{!}{\input{tab_class}}
+\caption{Class decisions per track on the held-out scenes. ``Acc.\ after $n$ frames'' is the accuracy of the class with the largest accumulated log-likelihood after $n$ frames of the track; SPRT is Wald's test with levels $0.01$. Tracks are matched to the true object they overlap most frames.}
+\label{tab:class}
+\end{table}
+Table~\ref{tab:class} compares the sequential test with decisions after a fixed number of frames.
+The sequential test is never more accurate than the better of the two fixed rules; at separation $1$ and $0.25$ it decides after about one frame because the evidence accumulated per frame already crosses Wald's boundary, and at separation $0.1$ it needs about four frames to reach an accuracy ($0.89$) close to that of five fixed frames ($0.90$).
+Accuracy stays at about $0.82$ to $0.90$ at all separations, including the easiest one, which indicates that most errors come from earlier stages (tracks that merge or swap objects, mask pixels that belong to the background, tracks fragmented across objects) and not from the class models.
+We have not isolated these causes, so we claim no benefit of the sequential test here, and its error levels should not be read as guarantees (frames of a track are dependent and the evidence is scaled by $n_{\mathrm{eff}}$).
+
+\subsection{A trained detector, for scale only}\label{sec:face}
+In an earlier experiment of the same package on a different task (faces in $640\times480$ video), the UltraLight RFB detector took $13.7$ ms per frame and the Haar cascade $100.9$ ms on a Colab CPU.
+The tasks, frame sizes, objects and machines differ, so this is not a comparison.
+No trained detector has been run on the scenes of this paper.
+
+\section{Discussion}\label{sec:discussion}
+\paragraph{What the results support.}
+(i) Window likelihoods from integral images are exact and cheap, so a scan over about $8.5\times10^4$ windows fits in a few milliseconds per $320\times240$ frame.
+(ii) A threshold taken from the null maxima keeps false alarms below the target and is necessary: a conventional fixed threshold fails completely on the same data.
+(iii) Compensation for global illumination matters when the scene drifts.
+(iv) Overlap suppression is essential.
+
+\paragraph{What they do not support.}
+The method is not more accurate than MOG2/KNN for detection and is slower; the sequential test brought no gain in accuracy; the guarantee was checked only where the model is nearly true.
+The only advantages left are the class labels that the baselines do not provide and the calibrated, interpretable threshold, and the former was shown only on colour-coded synthetic objects.
+
+\paragraph{Assumptions that can fail on real video.}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+\item \emph{Pixel model.} Independent Gaussian pixels are wrong for natural images (correlated noise, texture, shadows); then $Z$ is not centred and scaled as in~\eqref{eq:Z}. Proposition~\ref{prop:conformal} does not need the model to be right, which is why the threshold is calibrated, but a wrong model lowers power.
+\item \emph{Exchangeability.} Slow drift, camera shake and periodic motion (waves, foliage) violate it, and an adaptive background makes consecutive frames dependent.
+\item \emph{Background absorption.} Objects that stop are learned as background; shadows count as motion.
+\item \emph{Class models.} Colour alone cannot separate classes of the same colour. Gradients or texture can be added as channels, at the cost of more integral images; not tested.
+\item \emph{Tracking.} Overlap-based association fragments tracks; a motion model (Kalman filter) would be a natural improvement.
+\item \emph{Window set.} A coarse grid and three aspect ratios limit localisation; very small or elongated objects are missed.
+\end{itemize}
+
+\paragraph{Work needed to turn this into a contribution.}
+(1) Real video: CDnet~2014 categories, with the object-free segments used to check the false-alarm bound. (2) A trained lightweight detector with a tracker, on the same sequences and one CPU thread. (3) Temporal gating: scan all windows every $m$ frames and only a neighbourhood of predicted boxes otherwise; it is the natural way to gain speed, but it is not implemented, so no gain is claimed. (4) A tracker with a motion model, then re-measurement of the class accuracy to see whether the sequential test helps once upstream errors are removed. (5) Correlated-noise and camera-jitter experiments for the calibration. (6) A systematic literature search for prior work.
+
+\section{Conclusion}\label{sec:conclusion}
+\swift{} scores every sub-window of a frame in constant time from integral images of sufficient statistics, sets its alarm threshold by a finite-sample rank argument that covers all windows at once, and classifies tracked objects sequentially.
+On ten held-out synthetic scenes it scans \NwinPerFrame{} windows per $320\times240$ frame in \msSwift{} ms, raises no false alarm against a target of $0.05$, and detects objects with F$_1$ \fSwift{}, slightly below and slower than OpenCV's background subtractors, which give no classes.
+The calibrated threshold and the illumination compensation are shown to be necessary on these data; the sequential classifier is not shown to help.
+Whether the properties survive real video, and how the method compares with trained detectors, remains open, and the experiments that would decide it are listed in Section~\ref{sec:discussion}.
+
+\section*{Reproducibility}
+The package \texttt{fastfacetrack} (module \texttt{swift}, \texttt{moving}, \texttt{benchmark}) is at \url{https://github.com/yamenetoo/Fast-Face-tracking}.
+The tables of this paper are produced by \texttt{paper/make\_tables.py} from \texttt{results/benchmark/*.csv}; the benchmark is \texttt{fastfacetrack.benchmark.run\_benchmark} (about 12 minutes on two CPU cores).
+
+\appendix
+\section{Development history and the earlier run}\label{app:history}
+The algorithm was developed on one synthetic scene (seed 0) and on scenes with seeds 50--54 used for false-alarm tests.
+Three changes were made after looking at results on that scene: (a) local-maximum selection per window size and overlap suppression, after an early version had precision $0.14$ and recall $0.68$; (b) a false-alarm test that calibrates on the same stream, after a first design that calibrated on one scene and tested on others (which Proposition~\ref{prop:conformal} does not cover) gave $0.10$; (c) the illumination compensation.
+
+A first held-out run on ten scenes (seeds 1000--1009) then gave the results of Table~\ref{tab:v1}.
+It exposed a defect: the variance update used the uncompensated difference, so a slow global drift inflated the background variance, which lowered both the null maxima and the power.
+In that run the fixed threshold $Z>3$ looked as good as the calibrated one (false-alarm rate $0$), which was an artefact of the inflated variance, not a property of the method.
+We corrected the update (the variance now uses the compensated difference) and ran a second held-out evaluation on ten new scenes (seeds \seedLow--\seedHigh), which is the one reported in Section~\ref{sec:experiments}.
+Both runs are kept in the repository (\texttt{results/benchmark\_v1}, \texttt{results/benchmark}).
+
+\begin{table}[h]
+\centering\small
+\resizebox{\textwidth}{!}{\input{tab_detection_v1}}
+\caption{First held-out run (seeds 1000--1009) with the variance defect. Compare the fixed-threshold row with Table~\ref{tab:detection}.}
+\label{tab:v1}
+\end{table}
+
+\begin{thebibliography}{99}\small
+\bibitem{crow1984} F.~C. Crow. Summed-area tables for texture mapping. \emph{SIGGRAPH}, 1984.
+\bibitem{glaz2001} J.~Glaz, J.~Naus, S.~Wallenstein. \emph{Scan Statistics}. Springer, 2001.
+\bibitem{goyette2012} N.~Goyette, P.-M. Jodoin, F.~Porikli, J.~Konrad, P.~Ishwar. changedetection.net: a new change detection benchmark dataset. \emph{CVPR Workshops}, 2012.
+\bibitem{kulldorff1997} M.~Kulldorff. A spatial scan statistic. \emph{Communications in Statistics: Theory and Methods}, 26(6), 1997.
+\bibitem{lampert2008} C.~H. Lampert, M.~B. Blaschko, T.~Hofmann. Beyond sliding windows: object localization by efficient subwindow search. \emph{CVPR}, 2008.
+\bibitem{lei2018} J.~Lei, M.~G'Sell, A.~Rinaldo, R.~J. Tibshirani, L.~Wasserman. Distribution-free predictive inference for regression. \emph{Journal of the American Statistical Association}, 113(523), 2018.
+\bibitem{naus1965} J.~I. Naus. The distribution of the size of the maximum cluster of points on a line. \emph{Journal of the American Statistical Association}, 60(310), 1965.
+\bibitem{stauffer1999} C.~Stauffer, W.~E.~L. Grimson. Adaptive background mixture models for real-time tracking. \emph{CVPR}, 1999.
+\bibitem{viola2004} P.~Viola, M.~J. Jones. Robust real-time face detection. \emph{International Journal of Computer Vision}, 57(2), 2004.
+\bibitem{vovk2005} V.~Vovk, A.~Gammerman, G.~Shafer. \emph{Algorithmic Learning in a Random World}. Springer, 2005.
+\bibitem{wald1945} A.~Wald. Sequential tests of statistical hypotheses. \emph{Annals of Mathematical Statistics}, 16(2), 1945.
+\end{thebibliography}
+\noindent\textit{The reference list was written from memory and has not been checked against the sources; verify authors, years, titles and venues before submission.}
+
+\end{document}

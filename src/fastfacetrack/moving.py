@@ -11,7 +11,14 @@ from .detectors import iou
 from .swift import ClassModel, SPRTClassifier, SwiftMO
 
 # three object classes with overlapping colour distributions (BGR means, per-channel sd)
-CLASSES = {"red": ((70, 90, 190), 22), "green": ((80, 170, 100), 22), "yellow": ((70, 190, 200), 22)}
+_BASE = {"red": ((70, 90, 190), 22), "green": ((80, 170, 100), 22), "yellow": ((70, 190, 200), 22)}
+CLASSES = _BASE
+
+
+def class_params(sep: float = 1.0):
+    """Class colour (mean, sd), with the means pulled towards their grand mean by ``sep``."""
+    g = np.mean([m for m, _ in _BASE.values()], axis=0)
+    return {k: (tuple(g + sep * (np.array(m) - g)), sd) for k, (m, sd) in _BASE.items()}
 
 
 @dataclass
@@ -26,6 +33,7 @@ class MovingConfig:
     max_size: int = 64
     speed: float = 4.0
     noise_seed: int | None = None     # None: same as seed
+    class_sep: float = 1.0            # 1 = default colour separation; smaller = harder classes
 
 
 def make_background(cfg: MovingConfig, rng):
@@ -43,7 +51,7 @@ def render(cfg: MovingConfig, bg, objects, rng, t):
         w, h = o["w"], o["h"]
         yy, xx = np.mgrid[0:h, 0:w]
         ell = ((xx - w / 2) / (w / 2)) ** 2 + ((yy - h / 2) / (h / 2)) ** 2 <= 1.0
-        mean, sd = CLASSES[o["cls"]]
+        mean, sd = class_params(cfg.class_sep)[o["cls"]]
         patch = rng.normal(mean, sd, (h, w, 3)).astype(np.float32)
         region = frame[y0:y0 + h, x0:x0 + w]
         region[ell] = patch[ell]
@@ -89,7 +97,7 @@ def simulate_scene(cfg: MovingConfig, n_objects: int | None = None, noise_seed: 
 
 def train_class_model(cfg: MovingConfig, n=4000):
     rng = np.random.default_rng(cfg.seed + 1)
-    return ClassModel.fit({k: rng.normal(m, sd, (n, 3)) for k, (m, sd) in CLASSES.items()})
+    return ClassModel.fit({k: rng.normal(m, sd, (n, 3)) for k, (m, sd) in class_params(cfg.class_sep).items()})
 
 
 def _match(dets, truth, thr=0.5):

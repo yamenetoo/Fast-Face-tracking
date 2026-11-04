@@ -1,0 +1,9 @@
+,precision,precision,recall,recall,f1,f1,false_alarm_rate,false_alarm_rate,ms_per_frame,ms_per_frame
+,mean,std,mean,std,mean,std,mean,std,mean,std
+method,,,,,,,,,,
+SWIFT-MO (calibrated),0.873,0.085,0.779,0.112,0.823,0.099,0.0,0.0,5.294,0.499
+fixed threshold Z>3,0.063,0.009,0.777,0.111,0.116,0.016,1.0,0.0,20.341,2.551
+no illumination compensation,0.859,0.099,0.77,0.12,0.811,0.109,0.527,0.005,4.422,0.517
+no overlap suppression,0.026,0.007,0.974,0.017,0.05,0.013,0.0,0.0,115.389,66.545
+MOG2,0.926,0.051,0.793,0.107,0.853,0.085,0.0,0.0,1.736,0.297
+KNN,0.926,0.051,0.792,0.107,0.853,0.085,0.0,0.0,2.301,0.261

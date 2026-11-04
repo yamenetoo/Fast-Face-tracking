@@ -71,8 +71,8 @@ def window_loglik(stats: IntegralStats, box, mu, cov) -> float:
 class Background:
     """Per-pixel Gaussian background with exponential forgetting (diagonal covariance)."""
 
-    def __init__(self, rate: float = 0.02, min_var: float = 4.0):
-        self.rate, self.min_var = rate, min_var
+    def __init__(self, rate: float = 0.02, min_var: float = 4.0, compensate: bool = True):
+        self.rate, self.min_var, self.compensate = rate, min_var, compensate
         self.mean = self.var = None
 
     def init(self, frames: Sequence[np.ndarray]):
@@ -84,7 +84,8 @@ class Background:
     def distance(self, frame: np.ndarray, cap: float = 60.0) -> np.ndarray:
         """Squared Mahalanobis distance per pixel, summed over channels (chi2 with d dof)."""
         diff = frame.astype(np.float32) - self.mean
-        diff = diff - np.median(diff[::4, ::4].reshape(-1, diff.shape[2]), axis=0)   # global illumination shift
+        if self.compensate:
+            diff = diff - np.median(diff[::4, ::4].reshape(-1, diff.shape[2]), axis=0)   # global illumination shift
         return np.minimum((diff * diff / self.var).sum(-1), cap).astype(np.float64)
 
     def update(self, frame: np.ndarray, mask: np.ndarray | None = None):
@@ -94,8 +95,11 @@ class Background:
             r[mask] = self.rate * 0.05          # barely learn the pixels of detected objects
         r = r[..., None]
         diff = f - self.mean
+        dc = diff
+        if self.compensate:     # the variance must not absorb a global illumination shift
+            dc = diff - np.median(diff[::4, ::4].reshape(-1, diff.shape[2]), axis=0)
         self.mean += r * diff
-        self.var = np.maximum(self.var + r * (diff * diff - self.var), self.min_var)
+        self.var = np.maximum(self.var + r * (dc * dc - self.var), self.min_var)
 
 
 def make_sizes(shape, min_size=16, max_frac=0.6, scale=1.3, aspects=(1.0, 0.6, 1.6)):
@@ -220,11 +224,11 @@ class SwiftMO:
     """Frame-by-frame detector, segmenter and classifier of moving objects."""
 
     def __init__(self, shape, classifier: SPRTClassifier | None = None, alpha=0.05, stride=4,
-                 sizes=None, rate=0.02, overlap=0.5, max_missed=5):
+                 sizes=None, rate=0.02, overlap=0.5, max_missed=5, compensate=True):
         self.shape = shape
         self.sizes = sizes or make_sizes(shape)
         self.stride, self.alpha, self.overlap, self.max_missed = stride, alpha, overlap, max_missed
-        self.bg = Background(rate)
+        self.bg = Background(rate, compensate=compensate)
         self.cls = classifier
         self.threshold = None
         self.tracks: list[Track] = []
@@ -271,7 +275,7 @@ class SwiftMO:
                 pix = frame[y0:y1, x0:x1][mask].astype(np.float64)
                 self.cls.step(tr, pix)
             out.append({"box": box, "z": z, "track": ti, "label": None if tr.decided is None else self.cls.model.names[tr.decided],
-                        "decided_at": tr.decided_at, "age": tr.age, "mask_pixels": int(mask.sum())})
+                        "decided_at": tr.decided_at, "age": tr.age, "llr": tr.llr.copy(), "mask_pixels": int(mask.sum())})
         for i, tr in enumerate(self.tracks):
             if i not in used:
                 tr.missed += 1

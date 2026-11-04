@@ -182,6 +182,31 @@ What the run shows:
 
 Tables and figures are in [`results/`](results): `tables/test_aggregate.csv` (mean and sd per detector and model), `tables/test_summary.csv` (every video), `tables/training_report.csv`, and `figures/` (model comparison, probability timeline, annotated frames, cluster montage).
 
+## SWIFT-MO: fast statistical detection, segmentation and classification of moving objects
+
+`fastfacetrack.swift` adds a second engine that needs no trained detector. For each frame:
+
+1. an adaptive per-pixel Gaussian background gives the squared Mahalanobis distance of every pixel;
+2. integral images turn **every sub-window** of **every size** into an O(1) scan statistic `Z(W)`; the same integral images give the Gaussian log-likelihood of any window under a class model from its sufficient statistics (`window_loglik`);
+3. the alarm threshold is an order statistic of the maximum of `Z` over object-free frames, a finite-sample distribution-free bound on the false-alarm rate per frame under frame exchangeability (`conformal_threshold`);
+4. detected windows are tracked, and the class of each track is decided by Wald's sequential probability ratio test on the accumulated class log-likelihoods.
+
+```python
+res = fft.run_moving_experiment("results/moving")      # about 1 minute on CPU, 320 x 240 frames
+```
+
+First result (one synthetic scene, 240 frames, three objects of three colour classes, seed 0; `results/moving/summary.json`):
+
+| Quantity | Value |
+|---|---:|
+| Windows scored per frame | 84,550 |
+| Time per frame: background / scan / classification | 1.0 / 2.4 / 1.7 ms (5.1 ms total, 2 CPU cores) |
+| Detection precision / recall / F1 (IoU ≥ 0.5) | 0.90 / 0.84 / 0.87 |
+| False-alarm rate on object-free frames (target ≤ 0.05; 5 scenes, 500 frames) | 0.000 |
+| Tracks classified correctly by the SPRT | 7 of 7 (decided after 1 frame) |
+
+How to read it: this is a proof of concept on a synthetic scene whose objects have strongly different colours and whose noise is independent between pixels, which is what the model assumes. A 0.000 false-alarm rate with target 0.05 means the threshold is conservative here; it is not yet checked on real video, with camera motion, shadows or correlated noise. The SPRT decides after one frame because the classes are far apart; its error guarantee assumes independent frames. Seven tracks for three objects show track fragmentation that the simple association step does not repair. The full write-up of the method, claims and experiment plan is in the contribution document.
+
 ## 7. Limitations
 
 * **One photo per person.** Every simulated person is a single photo animated by the simulator. Training and test videos therefore show the same photo under different motion, lighting, blur and background. The results measure re-identification under those variations, **not** generalisation to new photos of the same person, and the near-perfect validation scores are optimistic for the same reason.
@@ -197,7 +222,7 @@ Tables and figures are in [`results/`](results): `tables/test_aggregate.csv` (me
 Fast-Face-tracking/
 ├── src/fastfacetrack/        the package (detectors, video, extraction, features, clustering,
 │                             models, training, evaluation, simulation, report, pipeline, cli)
-├── tests/                    pytest suite (18 tests)
+├── tests/                    pytest suite (23 tests)
 ├── notebooks/colab_simulation.ipynb   the Colab notebook: install, run, show results (not pre-executed)
 ├── examples/run_simulation.py
 ├── results/                  tables, figures and settings of the simulation reported above
@@ -208,7 +233,7 @@ Fast-Face-tracking/
 
 ```bash
 pip install -e ".[dev]"
-pytest            # 18 tests, about 15 seconds
+pytest            # 23 tests, about 45 seconds
 ```
 
 The tests cover box geometry and NMS, the five classifiers on a toy task, model save/load, the grouped split, clustering, the simulator (valid boxes, determinism, video size) and the evaluation columns.

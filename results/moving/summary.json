@@ -1,0 +1,22 @@
+{
+  "alpha": 0.05,
+  "threshold": 10.766,
+  "empty_scenes": 5,
+  "empty_frames_tested": 500,
+  "empty_false_alarm_rate": 0.0,
+  "precision": 0.9,
+  "recall": 0.8375,
+  "f1": 0.8676,
+  "tracks_decided": 7,
+  "tracks_correct": 7,
+  "sprt_mean_frames_to_decision": 1.0,
+  "background_ms": 1.034,
+  "scan_ms": 2.438,
+  "classify_ms": 1.66,
+  "total_ms_per_frame": 5.131,
+  "windows_per_frame": 84550,
+  "frame_size": [
+    320,
+    240
+  ]
+}

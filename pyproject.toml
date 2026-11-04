@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastfacetrack"
-version = "1.0.0"
+version = "1.1.0"
 description = "Fast face detection, extraction, target-face classification (ML and deep learning) and evaluation on video, with a built-in simulator."
 readme = "README.md"
 requires-python = ">=3.9"
